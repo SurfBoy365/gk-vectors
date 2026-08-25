@@ -1,0 +1,61 @@
+name: Build blackjack exact solver
+
+# Compiles the optimized C++ exact Blackjack-21 solver, verifies correctness on
+# known decks, benchmarks the slow deck, and uploads the .exe.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "blackjack21_exact_solver.cpp"
+      - "bj_test_deck.txt"
+      - "bj_test_deck_slow.txt"
+      - ".github/workflows/build-bj-solver.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: g++ version
+        run: g++ --version
+
+      - name: Compile (-O3, OpenMP, static, self-contained .exe)
+        run: g++ -O3 -std=c++17 -fopenmp -static -funroll-loops -o blackjack21_exact_solver.exe blackjack21_exact_solver.cpp
+
+      - name: Report runner cores
+        shell: pwsh
+        run: |
+          Write-Host "logical processors: $env:NUMBER_OF_PROCESSORS"
+
+      - name: Verify known prefixes (expect 10->2450, 13->4350, 16->4350)
+        shell: pwsh
+        run: |
+          foreach ($n in 10,13,16) {
+            $out = (Get-Content bj_test_deck.txt -TotalCount $n) | .\blackjack21_exact_solver.exe
+            Write-Host "N=$n -> score=$($out | Select-Object -First 1)"
+          }
+
+      - name: Fast deck (seed 2134167331, expect 14400) + timing
+        shell: pwsh
+        run: |
+          $sw=[System.Diagnostics.Stopwatch]::StartNew()
+          $out = Get-Content bj_test_deck.txt | .\blackjack21_exact_solver.exe
+          $sw.Stop()
+          Write-Host ("fast deck: score=" + ($out | Select-Object -First 1) + "  time=" + ("{0:N1}s" -f $sw.Elapsed.TotalSeconds))
+
+      - name: SLOW deck (seed 1722358378, expect 13400) + timing  <-- the speedup test
+        shell: pwsh
+        run: |
+          $sw=[System.Diagnostics.Stopwatch]::StartNew()
+          $out = Get-Content bj_test_deck_slow.txt | .\blackjack21_exact_solver.exe
+          $sw.Stop()
+          Write-Host ("SLOW deck: score=" + ($out | Select-Object -First 1) + "  time=" + ("{0:N1}s" -f $sw.Elapsed.TotalSeconds))
+
+      - name: Upload .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: blackjack21_exact_solver
+          path: blackjack21_exact_solver.exe
+          if-no-files-found: error

@@ -1,0 +1,59 @@
+name: Uniforms
+
+# On-demand: given a master seed, emit its GameplayKit nextUniform() bit-pattern
+# sequence (for the blackjack deck reconstruction) as an artifact.
+# Self-contained: the Swift source is inlined so there is no checkout step, and
+# it compiles without -O (the program runs a few hundred iterations, so codegen
+# optimization is pure latency) — both trims shave the cold-runner turnaround.
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Master seed (integer)"
+        required: true
+        type: string
+      count:
+        description: "How many uniforms to emit"
+        required: false
+        default: "512"
+        type: string
+
+jobs:
+  uniforms:
+    runs-on: macos-latest
+    steps:
+      - name: Build & emit uniforms
+        env:
+          SEED: ${{ inputs.seed }}
+          COUNT: ${{ inputs.count }}
+        run: |
+          cat > uniforms.swift <<'SWIFT'
+          import Foundation
+          import GameplayKit
+
+          guard let seedStr = ProcessInfo.processInfo.environment["SEED"],
+                let seed = UInt64(seedStr.trimmingCharacters(in: .whitespaces)) else {
+              FileHandle.standardError.write("SEED env var missing or not an integer\n".data(using: .utf8)!)
+              exit(1)
+          }
+          let count = Int(ProcessInfo.processInfo.environment["COUNT"] ?? "512") ?? 512
+
+          let rng = GKMersenneTwisterRandomSource(seed: seed)
+          var bits: [String] = []
+          for _ in 0..<count {
+              bits.append(String(rng.nextUniform().bitPattern))
+          }
+          let payload: [String: Any] = ["seed": seedStr, "count": count, "uniform_bits": bits]
+          let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+          try data.write(to: URL(fileURLWithPath: "uniforms.json"))
+          SWIFT
+          swiftc uniforms.swift -o uniforms
+          ./uniforms
+
+      - name: Upload uniforms.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniforms
+          path: uniforms.json
+          if-no-files-found: error

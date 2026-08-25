@@ -1,0 +1,32 @@
+name: GameplayKit RNG vectors
+
+# Runs the Swift generator on a free macOS runner (GameplayKit is Apple-only)
+# and publishes vectors.json as a downloadable artifact.
+
+on:
+  workflow_dispatch:   # run by hand from the Actions tab
+
+jobs:
+  vectors:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build generator
+        run: swiftc -O generate_vectors.swift -o generate_vectors
+
+      - name: Generate vectors
+        run: ./generate_vectors > /dev/null
+
+      - name: Show a preview
+        run: head -c 800 vectors.json; echo
+
+      - name: Upload vectors.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: gk-vectors
+          path: vectors.json
+          if-no-files-found: error

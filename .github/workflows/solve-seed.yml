@@ -1,0 +1,34 @@
+name: Solve seed
+
+# On-demand: given a master seed, compute its 3 sub-seeds on a macOS
+# runner (GameplayKit) and publish them as an artifact. Triggered by the local
+# backend via the GitHub API (workflow_dispatch), or by hand from the Actions tab.
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "master seed (integer)"
+        required: true
+        type: string
+
+jobs:
+  sub-seeds:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swiftc -O sub_seeds.swift -o sub_seeds
+
+      - name: Compute sub-seeds
+        env:
+          SEED: ${{ inputs.seed }}
+        run: ./sub_seeds
+
+      - name: Upload sub_seeds.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: sub-seeds
+          path: sub_seeds.json
+          if-no-files-found: error
